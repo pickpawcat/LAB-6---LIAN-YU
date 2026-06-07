@@ -1,181 +1,214 @@
-# LAB-6---LIAN-YU
-# TryHackMe-Lian_Yu WalkThrough
+**TryHackMe - Lian Yu (walkthrough)**
 
-A complete TryHackMe "Lian_Yu" CTF walkthrough focusing on web enumeration, repairing corrupted magic bytes, steganography, and Linux privilege escalation.
+**Step 1 Reconnaissance and Port Scanning**
 
-## Machine Details
+The first phase involves identifying open ports and services running on the target machine. An Nmap scan was performed to gather this information.
+**Command: nmap -sV 10.48.128.239**
 
-| Item | Description |                       
-|------|-------------|
-| Machine Name | Lian_Yu |
-| Platform | TryHackMe |
-| Difficulty | Easy |
+<img width="1675" height="824" alt="1Nmap" src="https://github.com/user-attachments/assets/a5f79fbf-2f8f-42ad-a4b5-c465da8b6805" />
 
-## Target Information
-* **Target IP:** 10.48.174.186
-* **Operating System:** Linux
+**Step 2 Web Application Analysis**
 
+Following the discovery of an open web service (Port 80), the target IP was accessed via a web browser to inspect the application front-end.
 
-## Phase 1: Reconnaissance & Footprinting
-The assessment commenced with a passive analysis of the target's web presence to gather initial intelligence before launching aggressive scans.
+**URL Accessed: http://10.48.128.239**
 
-**Web Surface Analysis (Port 80)**
-Navigating to the target's IP address `(http://10.48.174.186)` revealed an "ARROWVERSE" themed landing page detailing Oliver Queen's backstory.
+<img width="1671" height="1199" alt="2HTTP" src="https://github.com/user-attachments/assets/5a5023ff-d00e-4de5-942d-ffa1da43b7bd" />
 
-**Key Discovery:**
-While the page lacked interactive elements, a deeper inspection of the HTML source code yielded a critical footprinting clue. A hidden comment contained a specific code word:
+**Step 3 Web Directory Enumeration**
 
-```bash
-vigilante
-```
+To identify hidden directories and potential entry points within the web application, a directory brute-force attack was conducted. This process helps uncover paths that are not linked on the main landing page.
 
-## Phase 2: Scanning & Enumeration
+**Command Execution: gobuster dir -u http://10.48.128.239 -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt**
 
-With basic context established, active scanning was utilized to map the attack surface, identify open ports, and locate hidden web directories.
+Key Discovery: The scan successfully identified a hidden directory: /island (Status: 301).
 
-**Network Vulnerability Scanning**
+<img width="1145" height="412" alt="3Gobuster" src="https://github.com/user-attachments/assets/f57f858a-692e-4973-bf11-06c7ede90c18" />
 
-An initial `nmap` scan was executed to probe for running services and their specific versions:
+**Step 4 Manual Investigation of Hidden Directories**
 
-```bash
-nmap -sC -sV 10.48.174.186
-```
+**URL Accessed: http://10.48.128.239/island/**
 
-![Nmap Scan Result](images/01-recon/nmap/nmap-scan.png)
+<img width="1277" height="411" alt="4Vigilante" src="https://github.com/user-attachments/assets/191bb987-bbbc-4e5a-8b97-08d7b0ed6f1d" />
 
-**Open Ports Identified:**
+**Step 5 Recursive Directory Enumeration**
 
-`21/tcp` - FTP (vsftpd 3.0.2)
+With the code word in hand, a more targeted enumeration was performed on the newly discovered /island directory to find further sub-directories.
 
-`22/tcp` - SSH (OpenSSH 6.7p1)
+**Command Execution: gobuster dir -u http://10.48.128.239/island -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt**
 
-`80/tcp` - HTTP (Apache httpd)
+Result: The scan identified another hidden sub-directory named /2100 with a Status 301 (Moved Permanently).
 
-`111/tcp` - RPC (rpcbind)
+<img width="736" height="436" alt="5Island" src="https://github.com/user-attachments/assets/d59c54f9-e3fb-482d-95dd-0c916be3b135" />
 
-**Web Directory Bruteforcing**
+**Step 6 Source Code Inspection of /2100**
 
-Visiting the web server on `port 80` :
+Upon discovering the /2100 directory, a manual inspection of the page's source code was performed to identify hidden hints or comments left by the developer.
 
-```bash
-http://10.48.174.186
-```
+**URL Accessed: view-source:http://10.48.128.239/island/2100/**
 
-![Website Arrowverse](images/01-recon/enumeration/web-enumeration.png)
+<img width="1274" height="498" alt="6Ticket2100" src="https://github.com/user-attachments/assets/342390f0-9c24-470a-b963-d919943bcab7" />
 
-The landing page features an 'ARROWVERSE' theme detailing Oliver Queen's backstory. Since there are no visible links or interactive elements on the surface, the next logical step is to perform directory brute-forcing to uncover hidden paths.
+**Step 7 Identifying the Access Token**
 
-Gobuster was deployed to brute-force hidden paths:
+Guided by the hint discovered in the source code of the /2100 directory, a specialized Gobuster scan was executed to locate the specific file mentioned.
 
-```bash
-gobuster dir -u http://10.48.174.186/ --wordlist /usr/share/dirbuster/wordlists/directory-list-lowercase-2.3-medium.txt
-```
+**Command Execution: gobuster dir -u http://10.48.128.239/island/2100/ -w /usr/share/wordlists/dirbuster/directory-list-2.3-small.txt -x .ticket -t 50**
 
-This enumeration successfully uncovered a hidden directory: `/island`. A subsequent scan targeting `http://10.48.174.186/island`.
+Key Discovery: The scan successfully identified a file named green_arrow.ticket (Status: 200).
 
-![Website island](images/02-scanning/gobuster-01-ip/user-vigilante.png)
+<img width="736" height="435" alt="7GreenArrowTicket" src="https://github.com/user-attachments/assets/01104771-4b03-49af-9d2d-961343b62223" />
 
-We found out the Code Word by highlighting the `page text` or `viewing the page source`.
+**Step 8 Accessing the Queen’s Gambit Token**
 
-  Code Word : 
-  
-  ```bash
-  vigilante - (This is our FTP user)
-  ```
+Once the hidden file was identified through enumeration, it was accessed to retrieve the potential credential required for the next stage of the attack
 
-To dig deeper into the web structure, a secondary `gobuster` scan was initiated, this time specifically targeting the `/island` directory:
+**URL Accessed: http://10.48.128.239/island/2100/green_arrow.ticket**
 
-```bash
-gobuster dir -u [http://10.48.174.186/island](http://10.48.174.186/island) --wordlist /usr/share/dirbuster/wordlists/directory-list-lowercase-2.3-medium.txt
-```
+Data Extraction: Directly below the text, a unique string was identified: **RTy8yhBQdscX**
 
-It revealed a nested directory: `/2100`.
+<img width="1283" height="327" alt="8Gambit" src="https://github.com/user-attachments/assets/809f5fb1-ad28-408b-a654-ea8688fa7bc8" />
 
-![source-code](images/02-scanning/gobuster-02-island/page-source.png)
+**Step 9 Decoding the Access Token**
 
-Upon investigating the source code of the `/2100` page, a comment hinted at files utilizing a .ticket extension. A targeted gobuster scan was initiated using the `-x` flag:
+The encoded string retrieved from the green_arrow.ticket file required decryption to obtain the actual credential. Based on the character set, a Base-58 decoding algorithm was identified as the likely method.
 
-```bash
-gobuster dir -u http://10.48.174.186/island/2100 --wordlist /usr/share/dirbuster/wordlists/directory-list-lowercase-2.3-medium.txt -x .ticket
-```
+Input Data: The encoded string **RTy8yhBQdscX** was entered into an online Base-58 decoder.
 
-This precise scan located `green_arrow.ticket`. Viewing this file in the browser exposed a Base58 encoded token: `RTy8yhBQdscX`.
+Decoding Result: The tool successfully converted the ciphertext into the plaintext password: **!#th3h00d**
 
-![Website-green](images/02-scanning/gobuster-03-2100-ticket/web-encrypt-code.png)
+<img width="664" height="619" alt="9Base58" src="https://github.com/user-attachments/assets/10cd2c77-a184-421a-8f30-969766480b2f" />
 
-Utilizing CyberChef to decode the Base58 string produced the following plaintext password:
 
-```bash
-!#th3h00d
-```
+**Step 10 FTP Exploitation and Data Exfiltration**
 
-![Website CyberChef](images/02-scanning/gobuster-03-2100-ticket/ftp-password.png)
+With the password **!#th3h00d** successfully decoded, the next phase involved accessing the FTP service identified during the initial scan. This service was used to harvest sensitive files from the target machine.
 
-## Phase 3: Gaining Access (Initial Foothold)
+Key Files Identified:
 
-Armed with the intelligence gathered from the scanning phase, the next objective was to breach the system.
+.other_user: A hidden file potentially containing information about other system accounts.
 
-**FTP Exploitation & Data Exfiltration**
+aa.jpg: A themed image file.
 
-The credentials obtained (`vigilante` / `!#th3h00d`) were used to successfully authenticate into the FTP service on port 21.
+Leave_me_alone.png: An image file.
 
-Directory listing (ls -al) revealed three images, which were downloaded for local analysis. Additionally, navigating to the parent directory exposed the existence of a second user on the system: `slade`.
+Queen's_Gambit.png: An image file related to the "Arrow" theme.
 
-**Steganography & Magic Byte Repair**
+Exfiltration Process: The **"get"** command was utilized to download all identified files to the local attacker machine for offline analysis.
 
-While `aa.jpg` and `Queen's_Gambit.png` functioned normally, Leave_me_alone.png returned a format error.
-Analyzing the file with a hex editor exposed corrupted magic bytes in the file header `(58 45 6F AE)`.
+<img width="792" height="787" alt="10ftp" src="https://github.com/user-attachments/assets/31462c23-d88c-4d42-9cf2-a2f8970e342c" />
 
-These were manually corrected to the standard PNG signature (`89 50 4E 47`). The repaired image rendered correctly and displayed a hidden word: `password`.
+<img width="639" height="135" alt="11other_user" src="https://github.com/user-attachments/assets/4ed52bcd-d35d-4220-957b-ffc95e407828" />
 
-This keyword was immediately utilized as a passphrase for `steghide` against `aa.jpg`:
+**Step 11 Local File Management and Analysis**
 
-```bash
-steghide extract -sf aa.jpg
-```
+After successfully downloading the files from the FTP server, the contents were organized within the local machine's file system to prepare for further forensic and steganographic analysis.
 
-This extracted a compressed archive (`ss.zip`). Decompressing the archive yielded two files. Reading the `shado` file provided a new credential:
+Directory Location: The exfiltrated data was stored in the **"/root"** directory of the attacking machine.
 
-```bash
-M3tahuman
-```
+<img width="803" height="570" alt="12Folder" src="https://github.com/user-attachments/assets/eac98a51-7fca-4ab6-af44-5e30dcf037f1" />
 
-## Phase 3.1: Privilege Escalation
+**Step 12 File Header Analysis and Repair**
 
-The final stage involved leveraging the newly discovered credentials to escalate privileges to a root administrator.
+Upon attempting to open the exfiltrated image Leave_me_alone.png, it was discovered that the file was corrupted or unrecognizable by standard image viewers. A hexadecimal investigation was conducted to verify the file signature.
 
-**SSH Authentication**
+Technical Action: To repair the file, the corrupted bytes were manually edited and replaced with the standard PNG file signature: **89 50 4E 47 0D 0A 1A 0A**
 
-The credentials for the newly discovered user (slade / M3tahuman) provided successful SSH access to the target environment.
+<img width="736" height="513" alt="13Hexedit" src="https://github.com/user-attachments/assets/ee059303-fc0d-4835-abb5-86d59250e1ae" />
 
-**User Flag Captured:**
+<img width="555" height="405" alt="Leave_me_alone" src="https://github.com/user-attachments/assets/1daa4d0f-b5e0-4fc8-a8b8-2e88f7ebf181" />
 
-```bash
-THM{P30P7E_K33P_53CRET5__C0MPUT3R5_D0N'T}
-```
+**Step 13 Steganographic Extraction and Data Decryption**
 
-**System Enumeration for Privilege Escalation**
+After repairing the file headers, a steganographic analysis was performed on the image files. This led to the discovery of an encrypted archive containing sensitive system files.
 
-A hidden file named `.Important` suggested searching for a "Secret_Mission". Checking the user's sudo privileges (`sudo -l`) revealed a critical misconfiguration: `slade` was permitted to run `/usr/bin/pkexec` as `root` without password authentication.
+Extraction Process: The tool **"steghide"** was used to extract hidden data from aa.jpg using the passphrase.
 
-This vulnerability was exploited to instantly spawn a root shell:
+You can find the passphrase from the Leave_me_alone.jpg file.
 
-```bash
-sudo pkexec /bin/sh
-```
+Command: **steghide extract -sf aa.jpg**
 
-With absolute control over the system, the final objective was secured in the root directory.
+Archive Contents: Upon unzipping the archive, two critical files were recovered: 
 
-**Root Flag Captured:**
+passwd.txt: Containing a potential password. 
+shado: Containing a second credential or hint.
 
-```bash
-THM{MY_W0RD_I5_MY_B0ND_IF_I_ACC3PT_YOUR_CONTRACT_THEN_IT_WILL_BE_COMPL3TED_OR_I'LL_BE_D34D}
-```
+<img width="491" height="95" alt="14Steghide" src="https://github.com/user-attachments/assets/7b4e859c-cc75-4bea-b05a-bb3141975734" />
 
+<img width="788" height="553" alt="16passwd" src="https://github.com/user-attachments/assets/608c8e59-e855-4eee-82e9-c870c14158ce" />
 
+<img width="643" height="193" alt="15Shado" src="https://github.com/user-attachments/assets/90c0ed36-c6bc-4194-b05b-7220580e1bdb" />
 
+**Step 14 Identifying Secondary User Credentials**
 
+With the files from the encrypted archive extracted, the investigation shifted to identifying valid system users and their corresponding credentials for remote access.
 
+Command Execution: **cat .other_user**
 
-   
+Discovery: The file revealed a specific username: **slade**
+
+<img width="1673" height="415" alt="17CatOther user" src="https://github.com/user-attachments/assets/d9733d94-78b1-4aaf-90e4-af1963c836d6" />
+
+
+**Step 15 Establishing Remote Access via SSH**
+
+With the valid username and password identified from the previous forensic steps, the next phase was to establish a remote session on the target machine.
+
+Command Execution: **ssh slade@10.48.128.239**
+
+The password can be found in the **shado** file.
+
+<img width="699" height="399" alt="18sshSlade" src="https://github.com/user-attachments/assets/ebbbff5d-b67a-4db3-b2a3-38e334d0f4a7" />
+
+**Step 16 Local Enumeration and Flag Capture**
+
+Once the SSH session was established, the user's home directory was explored to locate the first objective of the challenge.
+
+Command Execution: **ls -al**
+
+Flag Retrieval: The **"cat user.txt"** command was used to read the file.
+
+<img width="548" height="278" alt="19Flag1" src="https://github.com/user-attachments/assets/50ec2329-1648-4baf-a19e-871615b4ee44" />
+
+
+**Step 17 Privilege Escalation**
+
+After obtaining the initial user shell, the final objective was to escalate privileges to the root user. This was achieved by exploiting a misconfiguration or utilizing sudo permissions granted to the current user.
+
+Command Execution: **sudo pkexec /bin/bash**
+
+The password can be found in the **shado** file.
+
+<img width="368" height="72" alt="20RootLianYu" src="https://github.com/user-attachments/assets/44dccbf5-6f34-4f3e-b59a-c9ff3cbfb7d2" />
+
+**Step 18 Final Flag Retrieval (Root Flag)**
+
+Command Execution: **"ls" followed by "cat root.txt"**
+
+<img width="857" height="501" alt="21Flag" src="https://github.com/user-attachments/assets/0e83f067-9010-4a42-beaa-6544ea656888" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
